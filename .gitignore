@@ -1,0 +1,57 @@
+## Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+## Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+## Environment files
+.env
+.env.*
+!.env.example
+
+## Packaging / build artifacts
+build/
+dist/
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+
+## Tool caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+
+## IDE / OS
+.DS_Store
+.idea/
+.vscode/
+
+## Logs
+*.log
+
+## Manim / generated media
+media/
+videos/
+images/
+Tex/
+text/
+partial_movie_files/
+*.mp4
+*.mov
+*.gif
+*.png
+*.svg
+
+## Temporary files
+tmp/
+*.tmp

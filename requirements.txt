@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+langgraph
+pydantic
+chromadb
+langchain
+langchain-openai
+requests
+slowapi
+langchain[google-genai]
