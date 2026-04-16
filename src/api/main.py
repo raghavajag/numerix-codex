@@ -10,7 +10,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from langgraph.errors import GraphRecursionError
-from pydantic import BaseModel
+from pydantic import AliasChoices, BaseModel, Field
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
@@ -20,10 +20,11 @@ SRC_DIR = Path(__file__).resolve().parents[1]
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
+ROOT_DIR = Path(__file__).resolve().parents[2]
+load_dotenv(ROOT_DIR / ".env")
+
+from api.language_registry import normalize_language
 from agent.graph import workflow_app
-
-
-load_dotenv()
 
 logging.basicConfig(
     level=logging.INFO,
@@ -47,7 +48,7 @@ app.add_middleware(
 
 class InstructionInput(BaseModel):
     prompt: str
-    language: str = "en"
+    language: str = Field(default="en", validation_alias=AliasChoices("language", "lang"))
 
 
 def _get_cache_collection():
@@ -99,7 +100,8 @@ def _cache_video_url(prompt: str, video_url: str) -> None:
 
 @app.get("/health")
 async def health() -> dict[str, str]:
-    return {"message": "ok"}
+    worker_url = os.getenv("MANIM_WORKER_URL", "").rstrip("/")
+    return {"message": "ok", "worker_url": worker_url or "unset"}
 
 
 @app.post("/run")
@@ -114,9 +116,14 @@ async def run_pipeline(request: Request, data: InstructionInput) -> dict[str, st
             return {"result": cached_url, "status": "success"}
 
         thread_id = str(uuid4())
-        logger.info("Running workflow for thread_id=%s", thread_id)
+        normalized_language = normalize_language(data.language)
+        logger.info(
+            "Running workflow for thread_id=%s with language=%s",
+            thread_id,
+            normalized_language,
+        )
         result = await workflow_app.ainvoke(
-            input={"prompt": data.prompt, "language": data.language},
+            input={"prompt": data.prompt, "language": normalized_language},
             config={
                 "configurable": {"thread_id": thread_id},
                 "recursion_limit": 18,
@@ -131,7 +138,14 @@ async def run_pipeline(request: Request, data: InstructionInput) -> dict[str, st
 
         video_url = result.get("video_url")
         if not video_url:
-            raise RuntimeError("Workflow completed without a video_url")
+            sandbox_error = (result.get("sandbox_error") or "").strip()
+            return JSONResponse(
+                status_code=422,
+                content={
+                    "result": sandbox_error or "Video generation failed after multiple attempts",
+                    "status": "error",
+                },
+            )
 
         _cache_video_url(data.prompt, video_url)
         return {"result": video_url, "status": "success"}

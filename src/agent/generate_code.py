@@ -6,27 +6,53 @@ import re
 from typing import Any
 
 from langchain.chat_models import init_chat_model
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from agent.graph_state import CodeOutline, State
+from api.language_registry import get_language_name
 from rag.retriever import format_evidence_block, format_foundation_block, get_foundation_chunks
 
 
-llm = init_chat_model("openai:gpt-4.1")
+llm = init_chat_model("openai:gpt-5.4")
+
+
+class HelperFunctionModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    purpose: str
+    inputs: list[str] = Field(default_factory=list)
+    outputs: list[str] = Field(default_factory=list)
+    dependencies: list[str] = Field(default_factory=list)
+
+
+class ShotFunctionModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    shot_id: str
+    purpose: str
+    uses_helpers: list[str] = Field(default_factory=list)
+    persistent_objects_used: list[str] = Field(default_factory=list)
+    key_symbols: list[str] = Field(default_factory=list)
 
 
 class OutlineOutput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     scene_name: str
     scene_class: str
     imports: list[str] = Field(default_factory=list)
     persistent_objects: list[str] = Field(default_factory=list)
-    helper_functions: list[dict] = Field(default_factory=list)
-    shot_functions: list[dict] = Field(default_factory=list)
+    helper_functions: list[HelperFunctionModel] = Field(default_factory=list)
+    shot_functions: list[ShotFunctionModel] = Field(default_factory=list)
     transition_rules: list[str] = Field(default_factory=list)
     validation_checks: list[str] = Field(default_factory=list)
 
 
 class CodeOutput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     code: str
     scene_name: str
 
@@ -78,6 +104,11 @@ Hard requirements:
 - Generate one executable Python scene class.
 - The class must inherit from VoiceoverScene.
 - Configure self.set_speech_service(GTTSService(lang="{language}", tld="com")).
+- All narration strings, spoken voiceover text, and user-facing on-screen labels must be
+  written in the target language: {language_name}.
+- If the user's prompt is in a different language, translate the final educational
+  narration and visible labels into {language_name} while keeping code identifiers and
+  Manim API names in English.
 - Keep continuity across shots and reuse persistent objects.
 - Use helper methods when the outline asks for them.
 - Prefer evidence-supported Manim APIs and common CE patterns.
@@ -141,8 +172,10 @@ def _outline_payload(state: State) -> str:
 def _code_payload(state: State) -> str:
     evidence_blocks = [format_evidence_block(item) for item in _ordered_evidence(state)]
     foundation_chunks = get_foundation_chunks()
+    language = state.get("language", "en") or "en"
     payload = {
         "prompt": state.get("prompt", ""),
+        "target_language": language,
         "topic_brief": state.get("topic_brief", {}),
         "scene_spec": state.get("scene_spec", {}),
         "shot_plan": _ordered_shots(state),
@@ -192,9 +225,10 @@ def generate_code_outline(state: State) -> dict:
 
 def generate_code(state: State) -> dict:
     language = state.get("language", "en") or "en"
+    language_name = get_language_name(language)
     response = llm.with_structured_output(CodeOutput).invoke(
         [
-            ("system", CODE_PROMPT.format(language=language)),
+            ("system", CODE_PROMPT.format(language=language, language_name=language_name)),
             ("human", _code_payload(state)),
         ]
     )

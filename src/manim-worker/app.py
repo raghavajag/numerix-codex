@@ -2,6 +2,7 @@ import os
 import re
 import shutil
 import subprocess
+import logging
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -15,6 +16,11 @@ app = FastAPI(title="AnimAI Manim Worker")
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 load_dotenv(ROOT_DIR / ".env")
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+)
+logger = logging.getLogger(__name__)
 
 TMP_DIR = Path(os.getenv("MANIM_TMP_DIR", "/tmp/manim-worker"))
 PUBLISHED_DIR = TMP_DIR / "published"
@@ -98,8 +104,15 @@ def _render_video(code: str, scene_name: str, request_id: str) -> Path:
     source_file.write_text(code, encoding="utf-8")
     media_dir = request_dir / "media"
     media_dir.mkdir(parents=True, exist_ok=True)
+    logger.info(
+        "worker: wrote source file=%s for scene_name=%s request_id=%s",
+        source_file,
+        scene_name,
+        request_id,
+    )
 
     command = _build_manim_command(source_file, scene_name, media_dir)
+    logger.info("worker: running command=%s", " ".join(command))
 
     try:
         subprocess.run(
@@ -110,18 +123,42 @@ def _render_video(code: str, scene_name: str, request_id: str) -> Path:
             timeout=RENDER_TIMEOUT_SECONDS,
         )
     except subprocess.TimeoutExpired as exc:
+        logger.error(
+            "worker: render timed out for scene_name=%s request_id=%s after %s seconds",
+            scene_name,
+            request_id,
+            RENDER_TIMEOUT_SECONDS,
+        )
         raise HTTPException(
             status_code=504,
             detail=f"Manim render timed out after {RENDER_TIMEOUT_SECONDS} seconds",
         ) from exc
     except subprocess.CalledProcessError as exc:
         error_output = (exc.stderr or exc.stdout or str(exc)).strip()
+        logger.error(
+            "worker: manim failed for scene_name=%s request_id=%s error=%s",
+            scene_name,
+            request_id,
+            error_output,
+        )
         raise HTTPException(status_code=500, detail=f"Manim failed: {error_output}") from exc
 
     video_path = _find_video_path(media_dir, scene_name)
     if video_path is None or not video_path.exists():
+        logger.error(
+            "worker: expected output missing for scene_name=%s request_id=%s media_dir=%s",
+            scene_name,
+            request_id,
+            media_dir,
+        )
         raise HTTPException(status_code=500, detail="Video not generated")
 
+    logger.info(
+        "worker: render complete for scene_name=%s request_id=%s video_path=%s",
+        scene_name,
+        request_id,
+        video_path,
+    )
     return video_path
 
 
@@ -131,6 +168,12 @@ def _upload_to_r2(video_path: Path, scene_name: str, request_id: str, today: str
         target_dir.mkdir(parents=True, exist_ok=True)
         published_path = target_dir / f"{request_id}.mp4"
         shutil.copy2(video_path, published_path)
+        logger.info(
+            "worker: SKIP_UPLOAD=1 returning local file URL for scene_name=%s request_id=%s published_path=%s",
+            scene_name,
+            request_id,
+            published_path,
+        )
         return published_path.resolve().as_uri()
 
     account_id = os.getenv("R2_ACCOUNT_ID")
@@ -176,11 +219,31 @@ def _upload_to_r2(video_path: Path, scene_name: str, request_id: str, today: str
             ExtraArgs={"ContentType": "video/mp4"},
         )
     except Exception as exc:
+        logger.error(
+            "worker: upload failed for scene_name=%s request_id=%s key=%s error=%s",
+            scene_name,
+            request_id,
+            key,
+            exc,
+        )
         raise HTTPException(status_code=500, detail=f"Upload failed: {exc}") from exc
 
     if public_base_url:
+        logger.info(
+            "worker: uploaded to R2 for scene_name=%s request_id=%s key=%s public_base_url=%s",
+            scene_name,
+            request_id,
+            key,
+            public_base_url,
+        )
         return f"{public_base_url}/{key}"
 
+    logger.info(
+        "worker: uploaded to R2 for scene_name=%s request_id=%s key=%s using fallback r2.dev URL",
+        scene_name,
+        request_id,
+        key,
+    )
     return f"https://pub-{account_id}.r2.dev/{key}"
 
 
@@ -194,6 +257,12 @@ def render(payload: dict[str, Any]) -> dict[str, str]:
     code, scene_name, request_id = _validate_render_payload(payload)
     today = date.today().isoformat()
     request_dir = _request_dir(request_id)
+    logger.info(
+        "worker: received render request for scene_name=%s request_id=%s code_length=%s",
+        scene_name,
+        request_id,
+        len(code),
+    )
 
     try:
         video_path = _render_video(code, scene_name, request_id)
@@ -202,6 +271,12 @@ def render(payload: dict[str, Any]) -> dict[str, str]:
         if os.getenv("KEEP_RENDER_ARTIFACTS") != "1":
             shutil.rmtree(request_dir, ignore_errors=True)
 
+    logger.info(
+        "worker: returning success for scene_name=%s request_id=%s video_url=%s",
+        scene_name,
+        request_id,
+        video_url,
+    )
     return {
         "video_url": video_url,
         "scene_name": scene_name,
