@@ -113,13 +113,30 @@ class ShotEvidence(TypedDict):
     notes: list[str]
 
 
+class HelperFunctionSpec(TypedDict):
+    name: str
+    purpose: str
+    inputs: list[str]
+    outputs: list[str]
+    dependencies: list[str]
+
+
+class ShotFunctionSpec(TypedDict):
+    name: str
+    shot_id: str
+    purpose: str
+    uses_helpers: list[str]
+    persistent_objects_used: list[str]
+    key_symbols: list[str]
+
+
 class CodeOutline(TypedDict):
     scene_name: str
     scene_class: str
     imports: list[str]
     persistent_objects: list[str]
-    helper_functions: list[dict]
-    shot_functions: list[dict]
+    helper_functions: list[HelperFunctionSpec]
+    shot_functions: list[ShotFunctionSpec]
     transition_rules: list[str]
     validation_checks: list[str]
 
@@ -140,3 +157,5 @@ class State(TypedDict):
     scene_name: str
     sandbox_error: str
     video_url: str
+    render_failures: int
+    simplification_attempted: bool

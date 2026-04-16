@@ -13,7 +13,7 @@ from agent.graph_state import RouteInfo, State, TopicBrief
 from agent.source_registry import get_domain_config
 
 
-llm = init_chat_model("openai:gpt-4.1")
+llm = init_chat_model("openai:gpt-5.4")
 
 REQUEST_HEADERS = {
     "User-Agent": (

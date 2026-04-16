@@ -8,7 +8,7 @@ from agent.generate_code import generate_code, generate_code_outline
 from agent.graph_state import State
 from agent.map_reduce import continue_shots, get_chunks
 from agent.plan_video import plan_video
-from agent.regenerate_code import correct_code, is_valid_code
+from agent.regenerate_code import correct_code, route_code_recovery, simplify_code
 from agent.research_router import route_prompt_for_grounding
 from agent.research_topic import build_topic_brief
 
@@ -31,6 +31,7 @@ graph.add_node(
 graph.add_node("generate_code_outline", generate_code_outline)
 graph.add_node("generate_code", generate_code)
 graph.add_node("correct_code", correct_code)
+graph.add_node("simplify_code", simplify_code)
 graph.add_node("execute_code", execute_code)
 
 graph.add_edge(START, "analyze_user_prompt")
@@ -50,13 +51,15 @@ graph.add_edge("generate_code_outline", "generate_code")
 graph.add_edge("generate_code", "execute_code")
 graph.add_conditional_edges(
     "execute_code",
-    is_valid_code,
+    route_code_recovery,
     {
         END: END,
         "correct_code": "correct_code",
+        "simplify_code": "simplify_code",
     },
 )
 graph.add_edge("correct_code", "execute_code")
+graph.add_edge("simplify_code", "execute_code")
 
 memory = InMemorySaver()
 workflow_app = graph.compile(checkpointer=memory)
