@@ -17,7 +17,7 @@ class output_format(BaseModel):
 
 
 SYSTEM_PROMPT = """
-You are AnimAI's prompt classifier. Decide whether the user's message should continue
+You are Numerix's prompt classifier. Decide whether the user's message should continue
 into the animation generation pipeline.
 
 Your job:

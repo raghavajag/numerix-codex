@@ -1,1 +1,1 @@
-"""AnimAI agent package."""
+"""Numerix agent package."""

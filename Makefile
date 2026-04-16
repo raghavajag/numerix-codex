@@ -2,9 +2,9 @@
 
 PROJECT_ID ?= anim-482714
 REGION ?= us-central1
-SERVICE_NAME ?= animai-api
-IMAGE_NAME ?= animai
-REPO_NAME ?= animai-repo
+SERVICE_NAME ?= numerix-api
+IMAGE_NAME ?= numerix
+REPO_NAME ?= numerix-repo
 IMAGE_URL := $(REGION)-docker.pkg.dev/$(PROJECT_ID)/$(REPO_NAME)/$(IMAGE_NAME)
 CONTAINER_NAME ?= $(SERVICE_NAME)
 

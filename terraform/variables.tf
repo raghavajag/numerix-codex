@@ -12,13 +12,13 @@ variable "region" {
 variable "repo_name" {
   description = "Artifact Registry repository name"
   type        = string
-  default     = "animai-repo"
+  default     = "numerix-repo"
 }
 
 variable "api_service_name" {
   description = "Cloud Run API service name"
   type        = string
-  default     = "animai-api"
+  default     = "numerix-api"
 }
 
 variable "worker_service_name" {

@@ -1,8 +1,8 @@
-# AnimAI
+# Numerix
 
-**Prompt in. Manim video out.**
+**Prompt in. Clear visual explanations out.**
 
-AnimAI is a two-service system that turns a natural-language learning prompt into a rendered animation video.
+Numerix is a two-service system that turns a natural-language learning prompt into a rendered animation video.
 It does more than generate raw code: it classifies the request, researches the topic when needed, plans the video shot-by-shot, retrieves Manim evidence, writes the scene, renders it in an isolated worker, and falls back to simpler code when reliability matters more than detail.
 
 ---
@@ -10,7 +10,7 @@ It does more than generate raw code: it classifies the request, researches the t
 ## Why This Exists
 
 Most "text to animation" demos stop at code generation.
-AnimAI tries to go one step further:
+Numerix tries to go one step further:
 
 - keep non-animation prompts out of the expensive path
 - ground real-world topics before visualizing them
@@ -59,7 +59,7 @@ LangGraph agent
 6. Each shot retrieves relevant Manim API chunks and example patterns.
 7. The model creates a code outline, then final Manim code.
 8. The worker renders the video.
-9. If rendering fails, AnimAI first repairs the code, then simplifies it aggressively to prioritize availability.
+9. If rendering fails, Numerix first repairs the code, then simplifies it aggressively to prioritize availability.
 
 ---
 
@@ -132,7 +132,7 @@ That state holds:
 
 ### 2. Research + planning
 
-This is where AnimAI becomes more than a one-shot code generator.
+This is where Numerix becomes more than a one-shot code generator.
 
 - [src/agent/research_router.py](/Users/pushpitkamboj/PersonalProjects/codex_hackathon/numerix-codex/src/agent/research_router.py) decides whether the topic needs external grounding.
 - [src/agent/research_topic.py](/Users/pushpitkamboj/PersonalProjects/codex_hackathon/numerix-codex/src/agent/research_topic.py) builds a factual topic brief.
@@ -140,7 +140,7 @@ This is where AnimAI becomes more than a one-shot code generator.
 
 ### 3. RAG for Manim
 
-AnimAI retrieves Manim-specific evidence before writing code.
+Numerix retrieves Manim-specific evidence before writing code.
 
 - [src/rag/chunks.py](/Users/pushpitkamboj/PersonalProjects/codex_hackathon/numerix-codex/src/rag/chunks.py) chunks Manim source files
 - [src/rag/indexing.py](/Users/pushpitkamboj/PersonalProjects/codex_hackathon/numerix-codex/src/rag/indexing.py) indexes them into Chroma
@@ -433,4 +433,4 @@ This repo already includes:
 
 ## One-Line Mental Model
 
-**AnimAI is a research-aware LangGraph planner that writes Manim, hands rendering to a worker, and cares more about producing a working educational video than winning a prompt beauty contest.**
+**Numerix is a research-aware LangGraph planner that writes Manim, hands rendering to a worker, and cares more about producing a working educational video than winning a prompt beauty contest.**

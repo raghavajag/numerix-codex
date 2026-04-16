@@ -12,7 +12,7 @@ from fastapi import FastAPI, HTTPException
 from dotenv import load_dotenv
 
 
-app = FastAPI(title="AnimAI Manim Worker")
+app = FastAPI(title="Numerix Render Worker")
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 load_dotenv(ROOT_DIR / ".env")

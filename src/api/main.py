@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 
 THRESHOLD = 1 - 0.2
 limiter = Limiter(key_func=get_remote_address)
-app = FastAPI(title="AnimAI API")
+app = FastAPI(title="Numerix API")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(

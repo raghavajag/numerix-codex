@@ -1,5 +1,5 @@
 output "service_url" {
-  description = "Public URL for the AnimAI API service"
+  description = "Public URL for the Numerix API service"
   value       = google_cloud_run_v2_service.animai_api.uri
 }
 

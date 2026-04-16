@@ -6,7 +6,8 @@ import { ChatInterface } from "@/components/ChatInterface";
 import type { ChatMessage } from "@/components/MessageItem";
 import { TopBar } from "@/components/TopBar";
 
-const STORAGE_KEY = "animai_chat_history";
+const STORAGE_KEY = "numerix_chat_history";
+const LEGACY_STORAGE_KEY = "animai_chat_history";
 
 function createMessage(partial: Partial<ChatMessage> & Pick<ChatMessage, "text">): ChatMessage {
   return {
@@ -24,12 +25,16 @@ export default function Page() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY);
+    const stored = localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem(LEGACY_STORAGE_KEY);
     if (stored) {
       try {
-        setMessages(JSON.parse(stored) as ChatMessage[]);
+        const parsed = JSON.parse(stored) as ChatMessage[];
+        setMessages(parsed);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
+        localStorage.removeItem(LEGACY_STORAGE_KEY);
       } catch {
         localStorage.removeItem(STORAGE_KEY);
+        localStorage.removeItem(LEGACY_STORAGE_KEY);
       }
     }
   }, []);
@@ -84,7 +89,7 @@ export default function Page() {
                 ...message,
                 isLoading: false,
                 isError: true,
-                text: "Unable to reach the AnimAI service right now.",
+                text: "Unable to reach the Numerix service right now.",
               }
             : message
         )

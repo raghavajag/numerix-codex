@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const API_URL = process.env.ANIMAI_API_URL || "http://localhost:8000";
+const API_URL =
+  process.env.NUMERIX_API_URL || process.env.ANIMAI_API_URL || "http://localhost:8000";
 
 export async function POST(request: NextRequest) {
   try {
