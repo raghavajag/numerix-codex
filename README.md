@@ -3,8 +3,22 @@
 # video Link
 https://www.loom.com/share/4a8c5c06e7b342a589e43f30005b1a52
 
-# deployed link
+# deployed backend base url
+https://shaun-effortful-lucien.ngrok-free.dev
 
+steps to use
+open postman, and hit https://shaun-effortful-lucien.ngrok-free.dev/run
+request:
+{
+  "prompt": "Derive the quadratic formula from ax^2 + bx + c = 0 step by step",
+  "lang": "fr"
+}
+
+response :
+{
+  "result": "https://pub-aafb5c7d6d464a91ba8d72301a43450d.r2.dev/manim/2026-04-16/QuadraticFormulaFallback/87d1ad3c-eba8-4b2a-a366-146d7427cdcf.mp4",
+  "status": "success"
+}
 
 
 **Prompt in. Clear visual explanations out.**
