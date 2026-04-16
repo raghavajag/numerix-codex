@@ -1,65 +1,40 @@
-import os
-from typing import Any
+from __future__ import annotations
 
-import chromadb
-from dotenv import load_dotenv
-from langgraph.types import Send
 from typing_extensions import TypedDict
 
+from langgraph.types import Send
+
 from agent.graph_state import State
+from rag.retriever import retrieve_shot_evidence
 
 
-load_dotenv()
-
-COLLECTION_NAME = "manim_source_code"
-
-
-class InstructionState(TypedDict):
-    instruction: str
+class ShotRetrievalState(TypedDict):
+    shot: dict
+    scene_spec: dict
+    topic_brief: dict
+    prompt: str
 
 
-def _get_collection():
-    required_vars = ("CHROMA_API_KEY", "CHROMA_DATABASE", "CHROMA_TENANT")
-    missing = [name for name in required_vars if not os.getenv(name)]
-    if missing:
-        raise EnvironmentError(
-            "Missing required Chroma environment variables: " + ", ".join(missing)
+def continue_shots(state: State) -> list[Send]:
+    return [
+        Send(
+            "get_chunks",
+            {
+                "shot": shot,
+                "scene_spec": state["scene_spec"],
+                "topic_brief": state["topic_brief"],
+                "prompt": state["prompt"],
+            },
         )
-
-    client = chromadb.CloudClient(
-        api_key=os.getenv("CHROMA_API_KEY"),
-        database=os.getenv("CHROMA_DATABASE"),
-        tenant=os.getenv("CHROMA_TENANT"),
-    )
-    return client.get_collection(name=COLLECTION_NAME)
-
-
-def continue_instructions(state: State) -> list[Send]:
-    return [Send("get_chunks", {"instruction": instr}) for instr in state["instructions"]]
-
-
-def get_chunks(state: InstructionState) -> dict[str, list[dict[str, Any]]]:
-    instruction = state["instruction"]
-    collection = _get_collection()
-    result = collection.query(query_texts=[instruction], n_results=1)
-
-    ids = result.get("ids", [[]])
-    documents = result.get("documents", [[]])
-    metadatas = result.get("metadatas", [[]])
-
-    chunk_ids = ids[0] if ids else []
-    chunk_documents = documents[0] if documents else []
-    chunk_metadatas = metadatas[0] if metadatas else []
-
-    chunks = [
-        {
-            "id": chunk_id,
-            "text": document,
-            "metadata": metadata or {},
-        }
-        for chunk_id, document, metadata in zip(
-            chunk_ids, chunk_documents, chunk_metadatas
-        )
+        for shot in state["shot_plan"]
     ]
 
-    return {"mapped_chunks": [{"instruction": instruction, "chunks": chunks}]}
+
+def get_chunks(state: ShotRetrievalState) -> dict:
+    evidence = retrieve_shot_evidence(
+        shot=state["shot"],
+        scene_spec=state["scene_spec"],
+        topic_brief=state["topic_brief"],
+        prompt=state["prompt"],
+    )
+    return {"retrieval_evidence": [evidence]}

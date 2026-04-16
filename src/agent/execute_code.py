@@ -11,7 +11,7 @@ load_dotenv()
 
 
 def execute_code(state: State) -> dict:
-    worker_url = os.getenv("MANIM_WORKER_URL", "").rstrip("/")
+    worker_url = os.getenv("MANIM_WORKER_URL", "http://localhost:8080").rstrip("/")
     if not worker_url:
         return {
             "sandbox_error": "MANIM_WORKER_URL is not configured",

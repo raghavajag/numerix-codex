@@ -1,71 +1,41 @@
+from __future__ import annotations
+
+import json
 import os
 from pathlib import Path
-from uuid import uuid4
 
-import chromadb
 from dotenv import load_dotenv
 
+from rag.chunks import chunking
+from rag.example_chunks import extract_example_chunks
+from rag.synthetic_chunks import build_synthetic_symbol_chunks
+
 try:
-    from .chunks import chunking
-except ImportError:
-    from chunks import chunking
+    import chromadb
+except ImportError as exc:  # pragma: no cover - runtime utility script
+    raise RuntimeError("chromadb must be installed to run indexing") from exc
 
 
 load_dotenv()
 
 DOCS_DIR = Path(__file__).resolve().parents[1] / "manim_docs"
-COLLECTION_NAME = "manim_source_code"
+API_COLLECTION_NAME = "manim_source_code"
+EXAMPLE_COLLECTION_NAME = "manim_example_chunks"
 BATCH_SIZE = 250
 
-MODULE_NAMES = [
-    "Camera",
-    "Animation",
-    "mobject_frame",
-    "mobject_geometry_arc",
-    "mobject_geometry_boolean_ops",
-    "mobject_geometry_labelled",
-    "mobject_geometry_line",
-    "mobject_geometry_polygram",
-    "mobject_geometry_shape_matchers",
-    "mobject_geometry_tips",
-    "mobject_graph",
-    "mobject_graphing_coordinate_systems",
-    "mobject_graphing_functions",
-    "mobject_graphing_number_line",
-    "mobject_graphing_probability",
-    "mobject_graphing_scale",
-    "mobject_matrix",
-    "mobject_table",
-    "mobject_text",
-    "mobject_three_d_polyhedra",
-    "mobject_three_d_three_d_utils",
-    "mobject_three_d_three_dimensions",
-    "mobject_types_image_mobject",
-    "mobject_types_point_cloud_mobject",
-    "mobject_types_vectorized_mobject",
-    "mobject_value_tracker",
-    "mobject_vector_field",
-    "scenes_moving_camera_scene",
-    "scenes_scene",
-    "scenes_three_d_scene",
-    "scenes_vector_space_scene",
-    "utils_color_core",
-    "utils_commands",
-    "utils_bezier",
-]
 
-files_to_index = [
-    (
-        str(DOCS_DIR / f"{module_name}.py"),
-        f"https://docs.manim.community/en/stable/reference/manim.{module_name}.html",
-    )
-    for module_name in MODULE_NAMES
-]
+def _doc_url(module_name: str) -> str:
+    return f"https://docs.manim.community/en/stable/reference/manim.{module_name}.html"
+
+
+def _iter_batches(items: list, batch_size: int):
+    for start in range(0, len(items), batch_size):
+        yield items[start : start + batch_size]
 
 
 def _validate_environment() -> None:
-    required_vars = ("CHROMA_API_KEY", "CHROMA_TENANT", "CHROMA_DATABASE")
-    missing = [name for name in required_vars if not os.getenv(name)]
+    required = ("CHROMA_API_KEY", "CHROMA_TENANT", "CHROMA_DATABASE")
+    missing = [name for name in required if not os.getenv(name)]
     if missing:
         raise EnvironmentError(
             "Missing required Chroma environment variables: " + ", ".join(missing)
@@ -74,60 +44,81 @@ def _validate_environment() -> None:
 
 def _normalize_metadata(metadata: dict) -> dict:
     normalized = dict(metadata)
-    children_ids = normalized.get("children_ids")
-    if isinstance(children_ids, list):
-        normalized["children_ids"] = ",".join(children_ids)
+    for key in (
+        "children_symbols",
+        "imports_hint",
+        "keywords",
+        "aliases",
+        "domain_tags",
+        "visual_patterns",
+        "symbols_used",
+        "layout_patterns",
+        "animation_patterns",
+        "teaching_patterns",
+    ):
+        value = normalized.get(key)
+        if isinstance(value, list):
+            normalized[key] = json.dumps(value, ensure_ascii=False)
     return normalized
 
 
-def _iter_batches(items: list, batch_size: int):
-    for start in range(0, len(items), batch_size):
-        yield items[start : start + batch_size]
+def _api_chunks() -> list[dict]:
+    chunks: list[dict] = []
+    for source_path in sorted(DOCS_DIR.glob("*.py")):
+        parent_chunks, child_chunks = chunking(str(source_path), _doc_url(source_path.stem))
+        chunks.extend(parent_chunks)
+        chunks.extend(child_chunks)
+    chunks.extend(build_synthetic_symbol_chunks(DOCS_DIR))
+    return chunks
+
+
+def _example_chunks() -> list[dict]:
+    chunks: list[dict] = []
+    for source_path in sorted(DOCS_DIR.glob("*.py")):
+        chunks.extend(extract_example_chunks(str(source_path)))
+    return chunks
+
+
+def _collection_id(chunk: dict) -> str:
+    prefix = chunk["metadata"].get("source_type", "chunk")
+    return f"{prefix}:{chunk['id']}"
+
+
+def _upload_collection(collection, chunks: list[dict]) -> None:
+    ids = [_collection_id(chunk) for chunk in chunks]
+    documents = [chunk["content"] for chunk in chunks]
+    metadatas = [_normalize_metadata(chunk["metadata"]) for chunk in chunks]
+
+    for batch_ids, batch_docs, batch_meta in zip(
+        _iter_batches(ids, BATCH_SIZE),
+        _iter_batches(documents, BATCH_SIZE),
+        _iter_batches(metadatas, BATCH_SIZE),
+    ):
+        collection.upsert(ids=batch_ids, documents=batch_docs, metadatas=batch_meta)
 
 
 def populate_chroma() -> None:
     _validate_environment()
-
-    ids: list[str] = []
-    documents: list[str] = []
-    metadatas: list[dict] = []
-
-    for file_path, file_url in files_to_index:
-        source_path = Path(file_path)
-        if not source_path.exists():
-            raise FileNotFoundError(f"Missing Manim docs source file: {source_path}")
-
-        parent_chunks, child_chunks = chunking(str(source_path), file_url)
-        for chunk in parent_chunks + child_chunks:
-            ids.append(str(uuid4()))
-            documents.append(chunk["content"])
-            metadatas.append(_normalize_metadata(chunk["metadata"]))
-
     client = chromadb.CloudClient(
         tenant=os.getenv("CHROMA_TENANT"),
         database=os.getenv("CHROMA_DATABASE"),
         api_key=os.getenv("CHROMA_API_KEY"),
     )
-    collection = client.get_or_create_collection(name=COLLECTION_NAME)
 
-    batched_ids = list(_iter_batches(ids, BATCH_SIZE))
-    batched_documents = list(_iter_batches(documents, BATCH_SIZE))
-    batched_metadatas = list(_iter_batches(metadatas, BATCH_SIZE))
+    api_collection = client.get_or_create_collection(name=API_COLLECTION_NAME)
+    example_collection = client.get_or_create_collection(name=EXAMPLE_COLLECTION_NAME)
 
-    for batch_ids, batch_documents, batch_metadatas in zip(
-        batched_ids, batched_documents, batched_metadatas
-    ):
-        collection.add(
-            ids=batch_ids,
-            documents=batch_documents,
-            metadatas=batch_metadatas,
-        )
+    api_chunks = _api_chunks()
+    example_chunks = _example_chunks()
+
+    _upload_collection(api_collection, api_chunks)
+    _upload_collection(example_collection, example_chunks)
 
     print(
-        f"Indexed {len(documents)} chunks from {len(files_to_index)} files into "
-        f"'{COLLECTION_NAME}'."
+        f"Indexed {len(api_chunks)} API chunks into '{API_COLLECTION_NAME}' and "
+        f"{len(example_chunks)} example chunks into '{EXAMPLE_COLLECTION_NAME}'."
     )
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover - utility script
     populate_chroma()

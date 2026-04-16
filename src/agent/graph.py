@@ -3,18 +3,22 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.types import RetryPolicy
 
 from agent.analyze_user_prompt import analyze_user_prompt, animation_required
-from agent.enhance_prompt import enhanced_prompt
 from agent.execute_code import execute_code
-from agent.generate_code import generate_code
+from agent.generate_code import generate_code, generate_code_outline
 from agent.graph_state import State
-from agent.map_reduce import continue_instructions, get_chunks
+from agent.map_reduce import continue_shots, get_chunks
+from agent.plan_video import plan_video
 from agent.regenerate_code import correct_code, is_valid_code
+from agent.research_router import route_prompt_for_grounding
+from agent.research_topic import build_topic_brief
 
 
 graph = StateGraph(State)
 
 graph.add_node("analyze_user_prompt", analyze_user_prompt)
-graph.add_node("enhanced_prompt", enhanced_prompt)
+graph.add_node("route_prompt_for_grounding", route_prompt_for_grounding)
+graph.add_node("build_topic_brief", build_topic_brief)
+graph.add_node("plan_video", plan_video)
 graph.add_node(
     "get_chunks",
     get_chunks,
@@ -24,6 +28,7 @@ graph.add_node(
         backoff_factor=2.0,
     ),
 )
+graph.add_node("generate_code_outline", generate_code_outline)
 graph.add_node("generate_code", generate_code)
 graph.add_node("correct_code", correct_code)
 graph.add_node("execute_code", execute_code)
@@ -33,12 +38,15 @@ graph.add_conditional_edges(
     "analyze_user_prompt",
     animation_required,
     {
-        "enhanced_prompt": "enhanced_prompt",
+        "enhanced_prompt": "route_prompt_for_grounding",
         END: END,
     },
 )
-graph.add_conditional_edges("enhanced_prompt", continue_instructions)
-graph.add_edge("get_chunks", "generate_code")
+graph.add_edge("route_prompt_for_grounding", "build_topic_brief")
+graph.add_edge("build_topic_brief", "plan_video")
+graph.add_conditional_edges("plan_video", continue_shots)
+graph.add_edge("get_chunks", "generate_code_outline")
+graph.add_edge("generate_code_outline", "generate_code")
 graph.add_edge("generate_code", "execute_code")
 graph.add_conditional_edges(
     "execute_code",

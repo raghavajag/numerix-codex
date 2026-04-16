@@ -1,0 +1,22 @@
+services:
+  api:
+    build:
+      context: .
+      target: api
+    env_file:
+      - .env
+    environment:
+      MANIM_WORKER_URL: http://manim-worker:8080
+    ports:
+      - "8000:8000"
+    depends_on:
+      - manim-worker
+
+  manim-worker:
+    build:
+      context: .
+      target: worker
+    env_file:
+      - .env
+    ports:
+      - "8080:8080"

@@ -1,0 +1,17 @@
+.git
+.gitignore
+.venv
+.localdeps
+__pycache__
+.pytest_cache
+.mypy_cache
+.ruff_cache
+*.pyc
+*.pyo
+*.pyd
+dist
+build
+node_modules
+src/fe/node_modules
+media
+tmp

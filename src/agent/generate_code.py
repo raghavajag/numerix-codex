@@ -1,113 +1,232 @@
+from __future__ import annotations
+
+import ast
 import json
+import re
+from typing import Any
 
 from langchain.chat_models import init_chat_model
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
-from agent.graph_state import State
+from agent.graph_state import CodeOutline, State
+from rag.retriever import format_evidence_block, format_foundation_block, get_foundation_chunks
 
 
 llm = init_chat_model("openai:gpt-4.1")
 
 
-class output_code(BaseModel):
+class OutlineOutput(BaseModel):
+    scene_name: str
+    scene_class: str
+    imports: list[str] = Field(default_factory=list)
+    persistent_objects: list[str] = Field(default_factory=list)
+    helper_functions: list[dict] = Field(default_factory=list)
+    shot_functions: list[dict] = Field(default_factory=list)
+    transition_rules: list[str] = Field(default_factory=list)
+    validation_checks: list[str] = Field(default_factory=list)
+
+
+class CodeOutput(BaseModel):
     code: str
     scene_name: str
 
 
-def _build_system_prompt(state: State) -> str:
-    language = state.get("language", "en") or "en"
-    mapped_chunks = json.dumps(state.get("mapped_chunks", []), indent=2, ensure_ascii=False)
+OUTLINE_PROMPT = """
+You are designing the code architecture for a single Manim educational scene.
 
-    return f"""
-You are an expert Manim (Community Edition) developer for educational content.
+You will receive:
+- the user prompt,
+- a grounded topic brief,
+- a global scene spec,
+- an ordered shot plan,
+- and shot-level evidence.
 
-You will generate a complete Manim scene from user intent plus retrieval context from
-the Manim source-code index.
+Return a structured code outline with:
+- scene_name
+- scene_class
+- imports
+- persistent_objects
+- helper_functions
+- shot_functions
+- transition_rules
+- validation_checks
 
-RETRIEVED MANIM CONTEXT
-Use this retrieved context directly when deciding which classes, methods, and patterns
-to use:
-{mapped_chunks}
-
-OUTPUT REQUIREMENTS
-- Return structured output with:
-  - code: a complete Python code string
-  - scene_name: the primary scene class name
-- The code must be runnable Python and represent a single coherent educational scene.
-- The scene class name in scene_name must exactly match the generated class name.
-
-CORE IMPLEMENTATION RULES
-- All imports must be explicit at the top of the file. Do not rely on wildcard
-  assumptions beyond standard Manim import conventions you explicitly write.
-- The main scene must inherit from VoiceoverScene.
-- You must configure voiceover with GTTSService.
-- GTTSService language must be "{language}" and tld must be "com".
-- Use safe area margins of 0.5 units from screen edges.
-- Maintain minimum spacing of 0.3 units between meaningful on-screen elements.
-- Use modular helper functions for repeated animation sequences or scene construction.
-- Add concise comments for complex spatial logic, layout calculations, or updater logic.
-- Do not use any external assets, files, images, audio clips, or downloaded resources.
-  Everything must be procedurally generated in code.
-- Do not include an if __name__ == "__main__" block.
-- Never use BLACK text color. Prefer BLUE_C, GREEN_C, GREY_A, GOLD_C, TEAL_C, WHITE,
-  or other non-black safe colors when needed.
-- Sync animation timing to voiceover whenever a voiceover tracker is active. Prefer
-  run_time=tracker.duration for major narrated animations.
-- If TeX or MathTex is necessary, configure a TexTemplate explicitly for any package
-  additions you need.
-- Manim plugins are allowed only if they clearly simplify the implementation and remain
-  compatible with Manim Community Edition.
-- Apply performance best practices: avoid unnecessary submobject counts, reuse mobjects
-  when practical, avoid redundant transforms, and keep updaters efficient.
-- Favor readable, maintainable code over clever code.
-
-VOICEOVER PATTERN EXAMPLE
-from manim import Circle, Create
-from manim_voiceover import VoiceoverScene
-from manim_voiceover.services.gtts import GTTSService
-
-class GTTSExample(VoiceoverScene):
-    def construct(self):
-        self.set_speech_service(GTTSService(lang="{language}", tld="com"))
-        circle = Circle()
-        with self.voiceover(text="Describe the circle being drawn.") as tracker:
-            self.play(Create(circle), run_time=tracker.duration)
-        self.wait()
-
-CONSTRUCT METHOD STRUCTURE
-- Organize the construct method into clear stages using comments such as:
-  - Stage 1: setup and layout
-  - Stage 2: introduce core objects
-  - Stage 3: animate the main explanation
-  - Stage 4: summarize or conclude
-- Helper methods may prepare objects, compute layout, or build recurring animation
-  groups, but construct should still read like a stage-by-stage lesson flow.
-
-SCENE DESIGN EXPECTATIONS
-- Build an educational animation that is visually clear, well paced, and spatially
-  organized.
-- Respect the user's original request and the mapped chunk context.
-- Prefer plain-language narration strings suitable for TTS.
-- When multiple instructional steps are implied, sequence them clearly across the stage
-  structure.
-- Keep text readable and avoid clutter.
-- Use comments sparingly but helpfully.
-
-Return only the structured output fields. Do not wrap the code in markdown fences.
+Requirements:
+- The output must describe one coherent scene class.
+- Reuse objects across shots whenever possible.
+- Prefer transformations over recreating everything.
+- Keep layout stable and educationally legible.
+- Prefer plain-text labels via Text or MarkupText unless a numerical readout really
+  needs DecimalNumber.
+- Do not rely on LaTeX-heavy rendering for the primary explanation.
+- The scene must inherit from VoiceoverScene and use GTTSService.
 """.strip()
 
 
-def generate_code(state: State) -> dict:
-    system_prompt = _build_system_prompt(state)
-    messages = state.get("messages", [])
-    response = llm.with_structured_output(output_code).invoke(
+CODE_PROMPT = """
+You are generating final Manim code for a grounded educational video.
+
+You will receive:
+- the user prompt,
+- a grounded topic brief,
+- a scene specification,
+- an ordered shot plan,
+- shot-level evidence packs,
+- and a code outline.
+
+Hard requirements:
+- Generate one executable Python scene class.
+- The class must inherit from VoiceoverScene.
+- Configure self.set_speech_service(GTTSService(lang="{language}", tld="com")).
+- Keep continuity across shots and reuse persistent objects.
+- Use helper methods when the outline asks for them.
+- Prefer evidence-supported Manim APIs and common CE patterns.
+- Prefer Text or MarkupText for explanatory labels and formulas to keep rendering robust.
+- Use DecimalNumber for changing numeric values when needed.
+- Avoid unsupported custom abstractions.
+- Keep the visual design clean, educational, and readable.
+- Do not include markdown fences.
+- Do not include if __name__ == "__main__".
+
+Preferred API families:
+- layout: VGroup, Group, next_to, arrange, to_edge, align_to, shift
+- graphing: Axes, NumberPlane, FunctionGraph, ParametricFunction, DashedLine
+- geometry: Circle, Dot, Line, Arrow, Arc, Polygon, Rectangle, Square
+- updates: ValueTracker, always_redraw
+- motion: Create, FadeIn, FadeOut, Transform, ReplacementTransform, MoveAlongPath,
+  LaggedStart, Succession, AnimationGroup, Indicate, Circumscribe, Flash
+
+Do not switch the whole scene layout abruptly unless the outline explicitly requires it.
+""".strip()
+
+
+FIX_PROMPT = """
+You are repairing Manim code after deterministic validation failed.
+
+Fix only the issues listed. Preserve the intended scene.
+Return structured output with:
+- code
+- scene_name
+""".strip()
+
+
+def _ordered_shots(state: State) -> list[dict[str, Any]]:
+    return sorted(state.get("shot_plan", []), key=lambda shot: shot["order"])
+
+
+def _ordered_evidence(state: State) -> list[dict[str, Any]]:
+    evidence = state.get("retrieval_evidence", [])
+    shot_order = {shot["shot_id"]: shot["order"] for shot in _ordered_shots(state)}
+    return sorted(evidence, key=lambda item: shot_order.get(item["shot_id"], 999))
+
+
+def _outline_payload(state: State) -> str:
+    payload = {
+        "prompt": state.get("prompt", ""),
+        "topic_brief": state.get("topic_brief", {}),
+        "scene_spec": state.get("scene_spec", {}),
+        "shot_plan": _ordered_shots(state),
+        "evidence_summary": [
+            {
+                "shot_id": item["shot_id"],
+                "allowed_symbols": item["allowed_symbols"],
+                "notes": item["notes"],
+            }
+            for item in _ordered_evidence(state)
+        ],
+    }
+    return json.dumps(payload, ensure_ascii=False)
+
+
+def _code_payload(state: State) -> str:
+    evidence_blocks = [format_evidence_block(item) for item in _ordered_evidence(state)]
+    foundation_chunks = get_foundation_chunks()
+    payload = {
+        "prompt": state.get("prompt", ""),
+        "topic_brief": state.get("topic_brief", {}),
+        "scene_spec": state.get("scene_spec", {}),
+        "shot_plan": _ordered_shots(state),
+        "code_outline": state.get("code_outline", {}),
+        "foundation_block": format_foundation_block(foundation_chunks),
+        "evidence_blocks": evidence_blocks,
+    }
+    return json.dumps(payload, ensure_ascii=False)
+
+
+def _validate_generated_code(code: str, scene_name: str) -> list[str]:
+    errors: list[str] = []
+
+    if "```" in code:
+        errors.append("Code contains markdown fences.")
+
+    try:
+        tree = ast.parse(code)
+    except SyntaxError as exc:
+        return [f"SyntaxError: {exc}"]
+
+    class_names = [node.name for node in tree.body if isinstance(node, ast.ClassDef)]
+    if scene_name not in class_names:
+        errors.append(f"scene_name '{scene_name}' does not match any class in the code.")
+
+    if "VoiceoverScene" not in code:
+        errors.append("VoiceoverScene is missing.")
+    if "GTTSService" not in code:
+        errors.append("GTTSService is missing.")
+    if "set_speech_service" not in code:
+        errors.append("set_speech_service call is missing.")
+
+    return errors
+
+
+def generate_code_outline(state: State) -> dict:
+    response = llm.with_structured_output(OutlineOutput).invoke(
         [
-            ("system", system_prompt),
-            *messages,
+            ("system", OUTLINE_PROMPT),
+            ("human", _outline_payload(state)),
         ]
     )
 
+    code_outline: CodeOutline = response.model_dump()
+    return {"code_outline": code_outline}
+
+
+def generate_code(state: State) -> dict:
+    language = state.get("language", "en") or "en"
+    response = llm.with_structured_output(CodeOutput).invoke(
+        [
+            ("system", CODE_PROMPT.format(language=language)),
+            ("human", _code_payload(state)),
+        ]
+    )
+
+    code = response.code
+    scene_name = response.scene_name
+    validation_errors = _validate_generated_code(code, scene_name)
+
+    if validation_errors:
+        fix_response = llm.with_structured_output(CodeOutput).invoke(
+            [
+                ("system", FIX_PROMPT),
+                (
+                    "human",
+                    json.dumps(
+                        {
+                            "errors": validation_errors,
+                            "code": code,
+                            "scene_name": scene_name,
+                            "code_outline": state.get("code_outline", {}),
+                            "scene_spec": state.get("scene_spec", {}),
+                        },
+                        ensure_ascii=False,
+                    ),
+                ),
+            ]
+        )
+        code = fix_response.code
+        scene_name = fix_response.scene_name
+
+    code = re.sub(r"^```(?:python)?\n|\n```$", "", code.strip(), flags=re.MULTILINE)
     return {
-        "code": response.code,
-        "scene_name": response.scene_name,
+        "code": code,
+        "scene_name": scene_name,
     }

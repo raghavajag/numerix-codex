@@ -54,9 +54,11 @@ def _get_cache_collection():
     required_vars = ("CHROMA_API_KEY", "CHROMA_DATABASE", "CHROMA_TENANT")
     missing = [name for name in required_vars if not os.getenv(name)]
     if missing:
-        raise RuntimeError(
-            "Missing required Chroma environment variables: " + ", ".join(missing)
+        logger.info(
+            "Chroma cache disabled because required environment variables are missing: %s",
+            ", ".join(missing),
         )
+        return None
 
     client = chromadb.CloudClient(
         api_key=os.getenv("CHROMA_API_KEY"),
@@ -68,6 +70,8 @@ def _get_cache_collection():
 
 def _get_cached_video_url(prompt: str) -> str | None:
     collection = _get_cache_collection()
+    if collection is None:
+        return None
     result = collection.query(query_texts=[prompt], n_results=1)
 
     distances = result.get("distances", [[]])
@@ -84,6 +88,8 @@ def _get_cached_video_url(prompt: str) -> str | None:
 
 def _cache_video_url(prompt: str, video_url: str) -> None:
     collection = _get_cache_collection()
+    if collection is None:
+        return
     collection.add(
         ids=[str(uuid4())],
         documents=[prompt],
