@@ -92,6 +92,7 @@ def _upload_to_r2(video_path: Path, scene_name: str, request_id: str, today: str
 
     key = f"manim/{today}/{scene_name}/{request_id}.mp4"
     endpoint_url = f"https://{account_id}.r2.cloudflarestorage.com"
+    public_base_url = os.getenv("R2_PUBLIC_BASE_URL", "").rstrip("/")
 
     client = boto3.client(
         "s3",
@@ -110,6 +111,9 @@ def _upload_to_r2(video_path: Path, scene_name: str, request_id: str, today: str
         )
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Upload failed: {exc}") from exc
+
+    if public_base_url:
+        return f"{public_base_url}/{key}"
 
     return f"https://pub-{account_id}.r2.dev/{key}"
 
