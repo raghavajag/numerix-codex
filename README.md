@@ -1,5 +1,12 @@
 # Numerix
 
+# video Link
+https://www.loom.com/share/4a8c5c06e7b342a589e43f30005b1a52
+
+# deployed link
+
+
+
 **Prompt in. Clear visual explanations out.**
 
 Numerix is a two-service system that turns a natural-language learning prompt into a rendered animation video.
