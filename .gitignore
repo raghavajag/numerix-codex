@@ -55,3 +55,8 @@ partial_movie_files/
 ## Temporary files
 tmp/
 *.tmp
+
+## Frontend
+src/fe/node_modules/
+src/fe/.next/
+src/fe/.turbo/

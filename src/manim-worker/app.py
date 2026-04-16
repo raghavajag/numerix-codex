@@ -6,9 +6,13 @@ from typing import Any
 from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException
+from dotenv import load_dotenv
 
 
 app = FastAPI(title="AnimAI Manim Worker")
+
+ROOT_DIR = Path(__file__).resolve().parents[2]
+load_dotenv(ROOT_DIR / ".env")
 
 TMP_DIR = Path("/tmp")
 MEDIA_DIR = TMP_DIR / "media"
