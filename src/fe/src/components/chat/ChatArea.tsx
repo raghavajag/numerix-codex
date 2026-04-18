@@ -2,10 +2,10 @@ import { useEffect, useRef } from "react";
 import { Loader2, Sparkles } from "lucide-react";
 
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { LanguageCode } from "@/lib/languages";
 import { Message } from "@/types/chat";
 import { ChatInput } from "./ChatInput";
 import { ChatMessage } from "./ChatMessage";
-import { LanguageCode } from "./LanguageSelector";
 
 interface ChatAreaProps {
   messages: Message[];

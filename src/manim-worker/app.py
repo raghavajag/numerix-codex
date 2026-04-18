@@ -10,6 +10,7 @@ from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException
 from dotenv import load_dotenv
+from fastapi.staticfiles import StaticFiles
 
 
 app = FastAPI(title="Numerix Render Worker")
@@ -29,6 +30,8 @@ RENDER_TIMEOUT_SECONDS = int(os.getenv("MANIM_RENDER_TIMEOUT_SECONDS", "900"))
 QUALITY_FLAG = os.getenv("MANIM_QUALITY_FLAG", "-ql").strip() or "-ql"
 SCENE_NAME_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 REQUEST_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{1,80}$")
+PUBLISHED_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/published", StaticFiles(directory=str(PUBLISHED_DIR)), name="published")
 
 
 def _validate_render_payload(payload: dict[str, Any]) -> tuple[str, str, str]:
@@ -69,6 +72,10 @@ def _validate_render_payload(payload: dict[str, Any]) -> tuple[str, str, str]:
 
 def _request_dir(request_id: str) -> Path:
     return TMP_DIR / request_id
+
+
+def _local_published_base_url() -> str:
+    return os.getenv("PUBLIC_MEDIA_BASE_URL", "http://localhost:8080/published").rstrip("/")
 
 
 def _build_manim_command(source_file: Path, scene_name: str, media_dir: Path) -> list[str]:
@@ -167,14 +174,15 @@ def _upload_to_r2(video_path: Path, scene_name: str, request_id: str, today: str
         target_dir = PUBLISHED_DIR / today / scene_name
         target_dir.mkdir(parents=True, exist_ok=True)
         published_path = target_dir / f"{request_id}.mp4"
+        relative_path = published_path.relative_to(PUBLISHED_DIR).as_posix()
         shutil.copy2(video_path, published_path)
         logger.info(
-            "worker: SKIP_UPLOAD=1 returning local file URL for scene_name=%s request_id=%s published_path=%s",
+            "worker: SKIP_UPLOAD=1 returning published HTTP URL for scene_name=%s request_id=%s published_path=%s",
             scene_name,
             request_id,
             published_path,
         )
-        return published_path.resolve().as_uri()
+        return f"{_local_published_base_url()}/{relative_path}"
 
     account_id = os.getenv("R2_ACCOUNT_ID")
     access_key_id = os.getenv("R2_ACCESS_KEY_ID")

@@ -2,9 +2,10 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowRight, Atom, GalleryHorizontal, Orbit, Sparkles, Waves } from "lucide-react";
 
-import { LanguageCode, LanguageSelector } from "@/components/chat/LanguageSelector";
+import { LanguageSelector } from "@/components/chat/LanguageSelector";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { LanguageCode } from "@/lib/languages";
 import { Textarea } from "@/components/ui/textarea";
 
 const examplePrompts = [

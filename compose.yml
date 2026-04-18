@@ -1,4 +1,15 @@
 services:
+  frontend:
+    build:
+      context: ./src/fe
+      args:
+        VITE_NUMERIX_API_URL: /api
+    ports:
+      - "3000:80"
+    depends_on:
+      - api
+      - manim-worker
+
   api:
     build:
       context: .
@@ -18,5 +29,12 @@ services:
       target: worker
     env_file:
       - .env
+    environment:
+      PUBLIC_MEDIA_BASE_URL: http://localhost:3000/published
     ports:
       - "8080:8080"
+    volumes:
+      - worker-media:/tmp/manim-worker
+
+volumes:
+  worker-media:

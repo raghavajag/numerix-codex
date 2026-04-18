@@ -3,10 +3,10 @@ import { ArrowLeft, Menu, Plus, X } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import { ChatArea } from "@/components/chat/ChatArea";
-import { LanguageCode } from "@/components/chat/LanguageSelector";
 import { ChatSidebar } from "@/components/chat/ChatSidebar";
 import { Button } from "@/components/ui/button";
 import { useChat } from "@/hooks/useChat";
+import { LanguageCode } from "@/lib/languages";
 import { cn } from "@/lib/utils";
 
 type StudioLocationState = {

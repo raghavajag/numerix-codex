@@ -232,6 +232,7 @@ docker compose up --build
 
 This starts:
 
+- frontend on `http://localhost:3000`
 - API on `http://localhost:8000`
 - worker on `http://localhost:8080`
 
@@ -312,7 +313,7 @@ Success:
 
 ```json
 {
-  "result": "file:///tmp/manim-worker/published/2026-04-16/...",
+  "result": "http://localhost:3000/published/2026-04-16/...",
   "status": "success"
 }
 ```
@@ -362,7 +363,7 @@ Request body:
 
 ## Frontend
 
-There is also a small Next.js chat frontend in:
+The frontend lives in:
 - [src/fe](/Users/pushpitkamboj/PersonalProjects/codex_hackathon/numerix-codex/src/fe)
 
 It gives you:
@@ -370,20 +371,32 @@ It gives you:
 - a single-page chat UI
 - loading/error states
 - local message persistence
-- a simple proxy route at `src/fe/app/api/generate/route.ts`
+- a Vite build served by Nginx in Docker
 
-Run it separately:
+If you use Docker Compose, it starts automatically and proxies API and local rendered media through the frontend:
 
 ```bash
-cd src/fe
-npm install
-ANIMAI_API_URL=http://localhost:8000 npm run dev
+docker compose up --build
 ```
 
 Then open:
 
 ```text
 http://localhost:3000
+```
+
+If you want to run the frontend outside Docker:
+
+```bash
+cd src/fe
+npm install
+VITE_NUMERIX_API_URL=http://localhost:8000 npm run dev
+```
+
+Then open:
+
+```text
+http://localhost:5173
 ```
 
 ---
@@ -397,7 +410,7 @@ src/
   rag/           Chunking, indexing, retrieval, reranking
   manim-worker/  Isolated render service
   manim_docs/    Local Manim source used to build retrieval corpus
-  fe/            Next.js chat frontend
+  fe/            Vite + React frontend
 tests/           Worker, retrieval, language, recovery, integration tests
 terraform/       Cloud Run + Artifact Registry infrastructure
 ```
@@ -433,7 +446,6 @@ This version is practical and debuggable, but not magic.
 
 - `/run` is still synchronous end-to-end, so long renders block the request.
 - Dense retrieval depends on Chroma credentials and indexed docs.
-- The frontend currently defaults to English unless you wire language choice into the UI.
 - Long, complex videos are possible, but reliability improves a lot when prompts are specific.
 - The worker is Dockerized and isolated on purpose, because Manim and voiceover dependencies are heavy.
 

@@ -3,7 +3,8 @@ import { ArrowUpRight } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { LanguageCode, LanguageSelector } from "./LanguageSelector";
+import { LanguageCode } from "@/lib/languages";
+import { LanguageSelector } from "./LanguageSelector";
 
 interface ChatInputProps {
   onSend: (message: string, language: LanguageCode) => void;
